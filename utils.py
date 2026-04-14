@@ -404,4 +404,5 @@ class YOLOv11(nn.Module):
         n3, n4, n5 = self.neck(p3, p4, p5)
         return self.head([n3, n4, n5])
     
-    
+if __name__ == "__main__":
+    pass
