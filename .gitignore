@@ -1,9 +1,4 @@
-/C3K2_f_block.png
-/yolo_architecture.png
-/bottleneck.png
-/C2PSA_block.png
-/C3K2_T_block.png
-/sppf_block.png
-/YOLOv11n_architecture.png
-/verify.ipynb
+/files
 /__pycache__
+/notebooks/verify.ipynb
+
