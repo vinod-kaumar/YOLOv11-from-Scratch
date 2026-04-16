@@ -41,7 +41,7 @@ def test_v8_detection_loss_iterations(iterations=100):
         
         # Check for NaNs
         if torch.isnan(total_loss):
-            print(f"\n❌ ERROR: NaN loss detected at iteration {i}!")
+            print(f"\n ERROR: NaN loss detected at iteration {i}!")
             return
             
         # Backward Pass & Optimize
@@ -53,7 +53,7 @@ def test_v8_detection_loss_iterations(iterations=100):
             print(f"Iteration {i+1:3d} | Total Loss: {total_loss.item():.4f} | "
                   f"Box: {loss_items['box']:.4f} | DFL: {loss_items['dfl']:.4f} | Cls: {loss_items['cls']:.4f}")
 
-    print("\n✅ Multi-iteration Check Successful! Loss decreases steadily without exploding or producing NaNs.")
+    print("\nMulti-iteration Check Successful! Loss decreases steadily without exploding or producing NaNs.")
 
 if __name__ == "__main__":
     # Fix seed for reproducible check

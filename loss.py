@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import math
 from utils import make_anchors
 
-# ── bbox_iou (your original verified version, untouched) ──────────────
 def bbox_iou(box1, box2, xywh=True, CIoU=False, eps=1e-7):
     """
     box1, box2 : [N, 4]  — must be same shape, element-wise comparison
@@ -475,3 +474,6 @@ class v8DetectionLoss(nn.Module):
             'dfl'   : loss_dfl.item(),
             'n_fg'  : int(fg_mask.sum())
         }
+        
+if __name__ == "__main__":
+    pass
