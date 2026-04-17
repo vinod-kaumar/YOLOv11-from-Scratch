@@ -1,6 +1,6 @@
 /files
-/__pycache__
-# /notebooks/verify.ipynb
+/__pycache__ 
 /tasks.txt
 /dataset
 /dataset_old.py
+# /notebooks/verify.ipynb

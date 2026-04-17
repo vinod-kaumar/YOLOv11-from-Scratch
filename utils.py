@@ -7,6 +7,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.ops import nms
 
 # ── Model Scales ──────────────────────────────────
 # model: [depth(d), width(w), max_channels(mc)]
@@ -403,6 +404,155 @@ class YOLOv11(nn.Module):
         p3, p4, p5 = self.backbone(x)
         n3, n4, n5 = self.neck(p3, p4, p5)
         return self.head([n3, n4, n5])
-    
+
+
+# post-processing methods
+
+def apply_nms(predictions, conf_thresh=0.25, iou_thresh=0.45):
+    """
+    Apply NMS to raw model output.
+
+    predictions : [B, 8400, 5]  (cx, cy, w, h, score)  pixel space
+                  model in eval mode already decoded boxes to xywh
+
+    Returns list of length B, each element:
+        np.ndarray [N, 6]  (x1, y1, x2, y2, score, class)  or empty
+    """
+    results = []
+    for pred in predictions:          # pred: [8400, 5]
+        scores = pred[:, 4]
+        mask   = scores > conf_thresh
+        pred   = pred[mask]
+
+        if pred.shape[0] == 0:
+            results.append(np.zeros((0, 6), dtype=np.float32))
+            continue
+
+        # xywh -> xyxy
+        cx, cy, w, h = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
+        x1 = cx - w / 2;  y1 = cy - h / 2
+        x2 = cx + w / 2;  y2 = cy + h / 2
+        boxes  = torch.stack([x1, y1, x2, y2], dim=1)
+        scores = pred[:, 4]
+
+        keep   = nms(boxes, scores, iou_thresh)
+        boxes  = boxes[keep].cpu().numpy()
+        scores = scores[keep].cpu().numpy()
+        labels = np.zeros(len(keep), dtype=np.float32)  # nc=1, class always 0
+
+        results.append(
+            np.concatenate([boxes, scores[:, None], labels[:, None]], axis=1)
+        )
+    return results
+
+def box_iou_numpy(box1, box2):
+    """
+    box1 : [N, 4]  xyxy
+    box2 : [M, 4]  xyxy
+    Returns [N, M] IoU matrix
+    """
+    area1 = (box1[:, 2] - box1[:, 0]) * (box1[:, 3] - box1[:, 1])  # [N]
+    area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])  # [M]
+
+    inter_x1 = np.maximum(box1[:, None, 0], box2[None, :, 0])  # [N, M]
+    inter_y1 = np.maximum(box1[:, None, 1], box2[None, :, 1])
+    inter_x2 = np.minimum(box1[:, None, 2], box2[None, :, 2])
+    inter_y2 = np.minimum(box1[:, None, 3], box2[None, :, 3])
+
+    inter = np.maximum(inter_x2 - inter_x1, 0) * np.maximum(inter_y2 - inter_y1, 0)
+    union = area1[:, None] + area2[None, :] - inter + 1e-7
+    return inter / union
+
+def compute_ap(recall, precision):
+    """Compute area under PR curve using 101-point interpolation."""
+    mrec = np.concatenate([[0.0], recall, [1.0]])
+    mpre = np.concatenate([[1.0], precision, [0.0]])
+    mpre = np.flip(np.maximum.accumulate(np.flip(mpre)))
+    idx  = np.where(mrec[1:] != mrec[:-1])[0]
+    return np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1])
+
+def compute_map(all_preds, all_gts, iou_thresholds=None, img_size=640):
+    """
+    Compute mAP@0.5 and mAP@0.5:0.95.
+
+    all_preds : list of np.ndarray [N, 6]  (x1,y1,x2,y2, score, cls)
+    all_gts   : list of np.ndarray [M, 5]  (cls, cx,cy,w,h) normalized
+                GT boxes are still in normalized format - we convert below
+
+    Returns: map50 (float), map5095 (float), precision (float), recall (float)
+    """
+    if iou_thresholds is None:
+        iou_thresholds = np.linspace(0.5, 0.95, 10)
+
+    ap_per_threshold = []
+
+    for iou_thr in iou_thresholds:
+        tp_list, conf_list, n_gt_total = [], [], 0
+
+        for preds, gts in zip(all_preds, all_gts):
+            # convert GT from normalized cxcywh -> pixel xyxy (IMG_SIZE)
+            if gts.shape[0] > 0:
+                gts_px = gts[gts[:, 1:].sum(-1) > 0]   # remove padding
+                if gts_px.shape[0] > 0:
+                    cx  = gts_px[:, 1] * img_size
+                    cy  = gts_px[:, 2] * img_size
+                    w   = gts_px[:, 3] * img_size
+                    h   = gts_px[:, 4] * img_size
+                    gt_boxes = np.stack(
+                        [cx - w/2, cy - h/2, cx + w/2, cy + h/2], axis=1
+                    )
+                else:
+                    gt_boxes = np.zeros((0, 4))
+            else:
+                gt_boxes = np.zeros((0, 4))
+
+            n_gt_total += len(gt_boxes)
+            matched = np.zeros(len(gt_boxes), dtype=bool)
+
+            if preds.shape[0] == 0:
+                continue
+
+            # sort preds by descending confidence
+            order  = np.argsort(-preds[:, 4])
+            preds  = preds[order]
+
+            for pred in preds:
+                conf_list.append(pred[4])
+                if len(gt_boxes) == 0:
+                    tp_list.append(0)
+                    continue
+                ious    = box_iou_numpy(pred[:4][None], gt_boxes)[0]  # [M]
+                best_i  = np.argmax(ious)
+                if ious[best_i] >= iou_thr and not matched[best_i]:
+                    tp_list.append(1)
+                    matched[best_i] = True
+                else:
+                    tp_list.append(0)
+
+        if len(tp_list) == 0 or n_gt_total == 0:
+            ap_per_threshold.append(0.0)
+            continue
+
+        tp_arr   = np.array(tp_list, dtype=np.float32)
+        conf_arr = np.array(conf_list)
+        order    = np.argsort(-conf_arr)
+        tp_arr   = tp_arr[order]
+
+        cum_tp  = np.cumsum(tp_arr)
+        cum_fp  = np.cumsum(1 - tp_arr)
+        recall  = cum_tp / (n_gt_total + 1e-7)
+        precision = cum_tp / (cum_tp + cum_fp + 1e-7)
+
+        ap_per_threshold.append(compute_ap(recall, precision))
+
+    # precision/recall at iou=0.5 for logging
+    final_prec = precision[-1] if len(tp_list) > 0 else 0.0
+    final_rec  = recall[-1]    if len(tp_list) > 0 else 0.0
+
+    map50   = ap_per_threshold[0]
+    map5095 = float(np.mean(ap_per_threshold))
+    return map50, map5095, float(final_prec), float(final_rec)
+
+
 if __name__ == "__main__":
     pass

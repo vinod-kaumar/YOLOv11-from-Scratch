@@ -157,8 +157,9 @@ class TaskAlignedAssigner(nn.Module):
         pos_iou_max   = (overlaps * mask_pos).amax(dim=-1, keepdim=True)  # [B, max_gt, 1]
 
         # normalized weight per (GT, anchor): [B, max_gt, 8400]
-        norm_weights  = (overlaps * mask_pos) / (pos_align_max + self.eps) * pos_iou_max
-
+        # norm_weights  = (overlaps * mask_pos) / (pos_align_max + self.eps) * pos_iou_max
+        norm_weights  = (align_metric * mask_pos) / (pos_align_max + self.eps) * pos_iou_max
+        
         # per anchor: take the max across GTs → [B, 8400]
         norm_weights  = norm_weights.amax(dim=1)
 
