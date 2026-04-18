@@ -98,9 +98,10 @@ def draw_detections(frame, detections):
     
     return out
 
-def run_inference(source_path):
+def run_inference(source_path, save=False):
     """Main runner for image or video inference."""
     device = torch.device('cpu') # Force CPU as requested
+    MAX_DISPLAY_DIM = 900
     
     # Resolve script root to handle relative internal paths correctly
     ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -168,8 +169,24 @@ def run_inference(source_path):
             detections = postprocess(output, lb_params, (orig_h, orig_w))
             annotated = draw_detections(frame, detections)
             
+            # --- Saving Logic ---
+            if save:
+                # Create output directory relative to the image (assumes dataset/test1/images/...)
+                output_dir = os.path.join(os.path.dirname(os.path.dirname(source_path)), "output")
+                os.makedirs(output_dir, exist_ok=True)
+                
+                save_path = os.path.join(output_dir, os.path.basename(source_path))
+                cv2.imwrite(save_path, annotated)
+                print(f"[INFO] Saved results to: {save_path}")
+
+            # --- Display Logic (Resizing for screen) ---
+            display_img = annotated.copy()
+            if max(orig_h, orig_w) > MAX_DISPLAY_DIM:
+                scale = MAX_DISPLAY_DIM / max(orig_h, orig_w)
+                display_img = cv2.resize(annotated, (int(orig_w * scale), int(orig_h * scale)))
+
             window_name = f"Inference: {os.path.basename(source_path)}"
-            cv2.imshow(window_name, annotated)
+            cv2.imshow(window_name, display_img)
             print(f"Detections found: {len(detections)}. Press any key to close.")
             cv2.waitKey(0)
             cv2.destroyAllWindows()
@@ -181,8 +198,9 @@ if __name__ == "__main__":
     ROOT = os.path.dirname(os.path.abspath(__file__))
 
     # Change this path to test images or videos
-    source = os.path.join(ROOT, "dataset", "test", "images", "Horizontal-CVC-557_png.rf.54f642eb47c7918a41d01c979e0d77ca.jpg")
+    source = os.path.join(ROOT, "test", "images", "1.jpg")
     
     # source = os.path.join(ROOT, "dataset", "test", "video", "demo_video.mp4")
     
-    run_inference(source)
+    # Set save=True to store results in dataset/test1/output
+    run_inference(source, save=True)

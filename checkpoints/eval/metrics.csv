@@ -1,2 +1,2 @@
 mAP@0.5,mAP@0.5:0.95,Precision,Recall,F1,Best_Conf_Thr,Avg_IoU,Miss_Rate,FP_Rate,Total_TP,Total_FP,Total_FN,Total_TN,n_images,n_gt_total,speed_ms,speed_fps
-0.9598,0.8137,0.9808,0.95,0.9652,0.6726,0.9137,0.0137,0.0,1349,104,52,0,1312,1401,1.01,993.3
+0.9545,0.8146,0.9728,0.9443,0.9583,0.5969,0.9135,0.0215,0.0014,1340,112,61,128,1442,1401,0.79,1259.7

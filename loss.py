@@ -440,6 +440,14 @@ class v8DetectionLoss(nn.Module):
 
         target_scores_sum = target_scores.sum().clamp(min=1e-4)
 
+        # Uncomment below guard line if u want val loss in the same scale of train_loss        
+        # ── guard: no foreground anchors (batch has only background) ──
+        # if not fg_mask.any():
+        #     zero = pred_logits.sum() * 0.0  # keeps gradient graph alive
+        #     return zero, {
+        #         'total': 0.0, 'cls': 0.0, 'box': 0.0, 'dfl': 0.0, 'n_fg': 0
+        #     }
+
         # ── 6. classification loss (BCE) ───────────────────────────────
         # target for cls: [B, 8400, 1]  (target_scores already 0 for negatives)
         loss_cls = F.binary_cross_entropy_with_logits(
