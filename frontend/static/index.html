@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="PolypVision AI - Real-time polyp detection powered by custom YOLOv11. Upload endoscopy images or videos for instant analysis.">
+    <title>PolypVision AI | Polyp Detection</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <!-- ── Navbar ─────────────────────────────────────────── -->
+    <nav id="navbar">
+        <div class="nav-brand">
+            <div class="logo-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v6l4 2" />
+                </svg>
+            </div>
+            <h1 class="logo-text">Polyp<span class="accent">Vision</span> AI</h1>
+        </div>
+        <div class="nav-controls">
+            <div class="confidence-control">
+                <label for="conf-slider">Confidence</label>
+                <input type="range" id="conf-slider" min="5" max="95" value="25" step="5">
+                <span id="conf-value" class="conf-badge">0.25</span>
+            </div>
+            <div class="status-dot" id="status-dot" title="Server status">
+                <span class="dot"></span>
+                <span class="status-text">Checking...</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ── Hero Section ───────────────────────────────────── -->
+    <section id="hero">
+        <div class="hero-content">
+            <h2 class="hero-title">AI-Powered Polyp Detection</h2>
+            <p class="hero-subtitle">Upload endoscopy images or videos for instant analysis using our custom YOLOv11
+                model trained on 7,149 images with <strong>97% mAP</strong> accuracy.</p>
+        </div>
+    </section>
+
+    <!-- ── Upload Zone ────────────────────────────────────── -->
+    <main id="main-content">
+        <div class="upload-card" id="upload-card">
+            <div class="upload-zone" id="upload-zone">
+                <div class="upload-icon">
+                    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                </div>
+                <p class="upload-text">Drag & drop your file here</p>
+                <p class="upload-hint">or click to browse</p>
+                <p class="upload-formats">Supports: JPG, PNG, MP4, AVI, MOV</p>
+                <input type="file" id="file-input" accept="image/jpeg,image/png,video/mp4,video/avi,video/quicktime"
+                    hidden>
+            </div>
+
+            <!-- File Preview (shown after selection) -->
+            <div class="file-preview" id="file-preview" style="display:none;">
+                <div class="file-info">
+                    <span class="file-icon" id="file-type-icon">🖼️</span>
+                    <div>
+                        <p class="file-name" id="file-name">filename.jpg</p>
+                        <p class="file-size" id="file-size">2.4 MB</p>
+                    </div>
+                </div>
+                <div class="file-actions">
+                    <button class="btn btn-primary" id="analyze-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                        Analyze
+                    </button>
+                    <button class="btn btn-ghost" id="clear-btn">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Loading Overlay ────────────────────────────── -->
+        <div class="loading-overlay" id="loading-overlay" style="display:none;">
+            <div class="loader">
+                <div class="spinner"></div>
+                <p class="loading-text">Processing...</p>
+                <p class="loading-hint" id="loading-hint">Analyzing image with YOLOv11</p>
+            </div>
+        </div>
+
+        <!-- ── Results Section ────────────────────────────── -->
+        <section id="results-section" style="display:none;">
+            <!-- Stats Bar -->
+            <div class="stats-bar" id="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-label">Detections</span>
+                    <span class="stat-value" id="stat-detections">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Processing Time</span>
+                    <span class="stat-value" id="stat-time">0ms</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Confidence Threshold</span>
+                    <span class="stat-value" id="stat-conf">0.25</span>
+                </div>
+            </div>
+
+            <!-- Result Display -->
+            <div class="result-container" id="result-container">
+                <!-- Image result -->
+                <div class="result-panel" id="image-result" style="display:none;">
+                    <div class="result-image-wrapper">
+                        <img id="result-image" alt="Detection result" />
+                    </div>
+                </div>
+
+                <!-- Video result -->
+                <div class="result-panel" id="video-result" style="display:none;">
+                    <video id="result-video" controls autoplay loop></video>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="result-actions">
+                <a class="btn btn-download" id="download-btn" download>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Download Result
+                </a>
+                <button class="btn btn-ghost" id="new-upload-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    New Upload
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ── Toast Container ────────────────────────────────── -->
+    <div id="toast-container"></div>
+
+    <!-- ── Footer ─────────────────────────────────────────── -->
+    <footer id="footer">
+        <p>Built with <span class="accent">YOLOv11 from Scratch</span> · Custom Architecture · 97% mAP Accuracy</p>
+        <p class="signature"> <span class="accent">@v9द</span> 🇮🇳</p>
+    </footer>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>
