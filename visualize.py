@@ -77,8 +77,8 @@ def draw_yolo_boxes(image_path, label_path, save=False):
 if __name__ == "__main__":
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    label_path = os.path.join(SCRIPT_DIR, "test", "labels", "1.txt")
-    image_path = os.path.join(SCRIPT_DIR, "test", "images", "1.jpg")
-    
+    label_path = os.path.join(SCRIPT_DIR, "real_test", "test","labels", "akb__013_jpg.rf.258c4ea9e4c8af684ed21406c2b3ff75.txt")
+    image_path = os.path.join(SCRIPT_DIR, "real_test", "test","images", "akb__013_jpg.rf.258c4ea9e4c8af684ed21406c2b3ff75.jpg")
+
     print(f"Processing: {image_path}")
-    draw_yolo_boxes(image_path, label_path, save=True)
+    draw_yolo_boxes(image_path, label_path, save=False)

@@ -198,7 +198,7 @@ if __name__ == "__main__":
     ROOT = os.path.dirname(os.path.abspath(__file__))
 
     # Change this path to test images or videos
-    source = os.path.join(ROOT, "test", "images", "1.jpg")
+    source = os.path.join(ROOT, "test", "images", "2.jpg")
     
     # source = os.path.join(ROOT, "dataset", "test", "video", "demo_video.mp4")
     

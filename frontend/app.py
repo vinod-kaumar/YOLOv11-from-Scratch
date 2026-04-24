@@ -10,11 +10,13 @@ import io
 import time
 import tempfile
 import uuid
+import json
+import traceback
 
 import cv2
 import torch
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, Query
+from fastapi import FastAPI, File, UploadFile, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +28,8 @@ PARENT_DIR = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, PARENT_DIR)
 
 from utils import YOLOv11, apply_nms
+from frontend.reports import generate_medical_report
+from frontend.explain import YOLOExplain, apply_heatmap_to_image
 
 # ── Configuration ──────────────────────────────────────────────
 MODEL_NAME  = "yolo11n"
@@ -51,6 +55,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Detections", "X-Processing-Time", "X-Detections-JSON", "X-Frames"],
 )
 
 # Serve static files (HTML, CSS, JS)
@@ -59,16 +64,20 @@ app.mount("/static", StaticFiles(directory=os.path.join(SCRIPT_DIR, "static")), 
 # ── Model Loading (once at startup) ───────────────────────────
 device = torch.device("cpu")
 model  = None
+explainer = None
 
 @app.on_event("startup")
 def load_model():
-    global model
+    global model, explainer
     print(f"[INFO] Loading model from: {CHECKPOINT}")
     model = YOLOv11(model_name=MODEL_NAME, nc=NC).to(device)
     ckpt = torch.load(CHECKPOINT, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model"])
     model.eval()
-    print("[INFO] Model loaded successfully!")
+    
+    # Initialize explainer targeting the last neck layer (layer 22)
+    explainer = YOLOExplain(model, model.neck.layer22)
+    print("[INFO] Model and Explainer loaded successfully!")
 
 # ── Helper Functions ──────────────────────────────────────────
 
@@ -234,8 +243,15 @@ async def predict_video(
     orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    # Browser compatibility: Use avc1 (H.264) for MP4
+    fourcc = cv2.VideoWriter_fourcc(*"avc1")
     writer = cv2.VideoWriter(tmp_out, fourcc, fps, (orig_w, orig_h))
+    
+    if not writer.isOpened():
+        # Fallback to mp4v if avc1 is not available on system
+        print("[WARN] avc1 codec failed, falling back to mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(tmp_out, fourcc, fps, (orig_w, orig_h))
 
     total_detections = 0
     frame_count = 0
@@ -282,4 +298,103 @@ async def predict_video(
         iterfile(),
         media_type="video/mp4",
         headers=headers,
+    )
+
+
+@app.post("/generate-report")
+async def create_report(
+    detections_json: str = Query(...),
+    processing_time: str = Query("N/A"),
+):
+    """
+    Generate a PDF clinical report from detection results.
+    """
+    try:
+        detections = json.loads(detections_json)
+        tmp_pdf = os.path.join(tempfile.gettempdir(), f"report_{uuid.uuid4().hex}.pdf")
+        generate_medical_report(tmp_pdf, detections, processing_time)
+        
+        return FileResponse(
+            tmp_pdf,
+            media_type="application/pdf",
+            filename="PolypVision_Report.pdf"
+        )
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time webcam frame processing.
+    Expects binary frames, returns detection JSON.
+    """
+    await websocket.accept()
+    print("[WS] Client connected for live detection.")
+    
+    try:
+        while True:
+            # Receive image bytes from client
+            data = await websocket.receive_bytes()
+            nparr = np.frombuffer(data, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                continue
+
+            orig_h, orig_w = frame.shape[:2]
+
+            # Inference
+            tensor, lb_params = preprocess(frame)
+            with torch.no_grad():
+                output = model(tensor)
+
+            detections = postprocess(output, lb_params, (orig_h, orig_w), conf_thresh=0.25)
+            
+            # Send results back as JSON string
+            await websocket.send_text(json.dumps({
+                "detections": detections,
+                "count": len(detections)
+            }))
+            
+    except WebSocketDisconnect:
+        print("[WS] Client disconnected.")
+    except Exception as e:
+        print(f"[WS] Error: {e}")
+        traceback.print_exc()
+        try:
+            await websocket.close()
+        except:
+            pass
+
+
+@app.post("/explain")
+async def explain_detection(
+    file: UploadFile = File(...),
+):
+    """
+    Generate a Grad-CAM heatmap for the uploaded image.
+    """
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if frame is None:
+        return JSONResponse(status_code=400, content={"error": "Invalid image"})
+
+    # Preprocess
+    tensor, _ = preprocess(frame)
+    
+    # Generate heatmap
+    heatmap_mask = explainer.generate_heatmap(tensor, class_idx=0)
+    
+    # Apply to image
+    explained_img = apply_heatmap_to_image(frame, heatmap_mask)
+    
+    # Encode and return
+    _, buffer = cv2.imencode(".jpg", explained_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    
+    return StreamingResponse(
+        io.BytesIO(buffer.tobytes()),
+        media_type="image/jpeg"
     )
