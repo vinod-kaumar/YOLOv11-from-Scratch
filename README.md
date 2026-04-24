@@ -8,8 +8,8 @@ The goal of this project is to provide a high-precision, low-latency diagnostic 
 
 - **Model:** YOLOv11n (Nano)
 - **Parameters:** ~2.3 Million
-- **Inference Speed:** ~3.92 ms per image (254.8 FPS) on an RTX 4080 GPU
-- **Accuracy:** 95.34% mAP@0.5 on Real Clinical Test Set
+- **Accuracy (mAP@0.5):** 93.43%
+- **Inference Speed:** ~892.7 FPS (GPU) / ~10.48 FPS (CPU)
 
 ## 📂 Directory Structure
 
@@ -21,7 +21,6 @@ The goal of this project is to provide a high-precision, low-latency diagnostic 
 - `inference.py`: High-speed inference script for processing individual frames and videos.
 - `visualize.py`: Scripts for generating bounding box overlays and evaluation charts (e.g., Confusion Matrix, PR curves).
 - `frontend/`: Full-stack web application. Includes a FastAPI backend (`app.py`) and a premium, responsive frontend (HTML/JS/CSS) featuring drag-and-drop uploads, live inference, and report generation.
-- `Dockerfile` & `docker-compose.yml`: Containerization configurations for seamless, isolated deployment.
 - `report.txt` & `ppt.txt`: Comprehensive documentation outlining project methodology, training details, and presentation content.
 
 ## 📊 Dataset
@@ -30,7 +29,7 @@ The training data was curated in two phases to ensure diversity:
 1. **Phase 1 (Roboflow):** Foundational images with various shapes, sizes, and lighting conditions.
 2. **Phase 2 (Clinical/Sir's Dataset):** High-quality, real-world clinical data to prevent overfitting and improve generalization.
 
-**Total Training Images:** 6,502 | **Validation:** 902 | **Test:** 189
+**Total Images:** 9,035 | **Training:** 6,502 | **Validation:** 902 | **Test:** 1,631
 
 ## 🧠 Architecture Highlights
 
@@ -39,14 +38,16 @@ The training data was curated in two phases to ensure diversity:
 - **Head:** 3-scale Detect Head (8x, 16x, 32x strides) to accurately capture polyps of varying sizes.
 - **Optimization:** Task Aligned Assigner (TAL) ensures high-quality positive anchor matching during training.
 
-## 📈 Key Metrics (Clinical Test Set)
+## 📈 Key Metrics
 
-- **mAP@0.5:** 0.9534
-- **Recall:** 0.9672
-- **Precision:** 0.9465
-- **F1-Score:** 0.9568
+- **mAP@0.5:** 0.9343 (93.43%)
+- **Precision:** 0.9749 (97.49%)
+- **Recall:** 0.9299 (92.99%)
+- **F1 Score:** 0.9519
 
-*Note: The model is tuned slightly toward sensitivity to ensure minimal false negatives, a critical requirement for medical screening applications.*
+### Speed:
+- **CPU Inference:** ~10.48 FPS (Robust for edge deployment).
+- **GPU Inference:** ~892.7 FPS (Ultra-fast screening).
 
 ## 💻 Web Application
 
@@ -59,12 +60,6 @@ Features include:
 
 ### Running the Application
 
-**Using Docker:**
-```bash
-docker-compose up --build
-```
-
-**Using Python directly:**
 ```bash
 pip install -r requirements.txt # (Assuming dependencies are listed)
 python -m uvicorn frontend.app:app --host 0.0.0.0 --port 8000 --reload
